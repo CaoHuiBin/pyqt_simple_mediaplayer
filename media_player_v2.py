@@ -3,41 +3,37 @@ import sys
 
 
 class MediaPlayer(QtWidgets.QWidget):
+    # 自定义信号
+    _slider_draged = QtCore.pyqtSignal(int)
+
     def __init__(self):
         super(MediaPlayer, self).__init__()
         self.setWindowTitle("IMedia Player")
-        self.setWindowIcon(QtGui.QIcon(r'E:\pyworkspace\media_player\images\logo.jpg'))
+        self.setWindowIcon(QtGui.QIcon(r'E:\PyProject\pyqt_simple_mediaplayer\images\logo.jpg'))
 
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
-        self.slider.setFixedHeight(4)
-        self.slider.setStyleSheet('''
-             QSlider::add-page:Horizontal
-             {
-                background-color: rgb(87, 97, 106);
-                height:4px;
-             }
-             QSlider::sub-page:Horizontal
-            {
-                background-color:qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba(231,80,229, 255), stop:1 rgba(7,208,255, 255));
-                height:4px;
-             }
-            QSlider::groove:Horizontal
-            {
-                background:transparent;
-                height:4px;
-            }''')
-
+        self.layout = QtWidgets.QVBoxLayout()
+        self.slider = Slider(self)
         self.media_screen = QtMultimediaWidgets.QVideoWidget()
+        self.player = Player(self)
+        self.setWidgets()
+        self.setSignal()
 
-        v_box = QtWidgets.QVBoxLayout()
-        # 设置layout的间隔和与内的widget的边距
-        v_box.setSpacing(0)
-        v_box.setContentsMargins(0, 0, 0, 0)
+    def setWidgets(self):
+        self.layout.setSpacing(0)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.addWidget(self.media_screen)
+        self.layout.addWidget(self.slider)
 
-        v_box.addWidget(self.media_screen)
-        v_box.addWidget(self.slider)
+        self.setLayout(self.layout)
 
-        self.setLayout(v_box)
+    def setSignal(self):
+        # 关联视频进度和进度条位置
+        self.player.positionChanged.connect(self.slider.set_slider_position)
+        self.player.metaDataAvailableChanged.connect(self.player.metaDataPrint)
+        # self.
+        self.player.mediaStatusChanged.connect(self.player.mediaChangedSlot)
+        self.player.error.connect(self.player.handleError)
+        self._slider_draged.connect(self.player.set_media_position)
 
     def closeEvent(self, event):
         reply = QtWidgets.QMessageBox.question(self, '确认退出', '你确定退出吗？',
@@ -48,8 +44,42 @@ class MediaPlayer(QtWidgets.QWidget):
         else:
             event.ignore()
 
-    def setSliderPostion(self, value):
-        self.slider.setValue(value)
+    def keyPressEvent(self, e):
+        if e.key() == QtCore.Qt.Key_Space:
+            if self.player.state() == QtMultimedia.QMediaPlayer.PausedState:
+                self.player.play()
+            elif self.player.state() == QtMultimedia.QMediaPlayer.PlayingState:
+                self.player.pause()
+        elif e.key() == QtCore.Qt.Key_Escape:
+            if self.isFullScreen():
+                self.showNormal()
+                self.slider.show()
+        elif e.key() == QtCore.Qt.Key_Enter:
+            print("aa")
+            if self.isFullScreen():
+                self.showFullScreen()
+            else:
+                self.showFullScreen()
+
+    def mouseDoubleClickEvent(self, e):
+        if self.isFullScreen():
+            self.showNormal()
+            self.slider.show()
+        else:
+            self.showFullScreen()
+            self.slider.hide()
+
+    def mouseReleaseEvent(self, e):
+        if self.player.state() == QtMultimedia.QMediaPlayer.PlayingState:
+            self.player.pause()
+        elif self.player.state() == QtMultimedia.QMediaPlayer.PausedState:
+            self.player.play()
+
+    def mouseMoveEvent(self, e):
+        print(QtWidgets.QDesktopWidget.x())
+        print(e.y())
+        if e.y() > QtWidgets.QDesktopWidget.x() * 0.9:
+            print('aaaa')
 
 
 class Player(QtMultimedia.QMediaPlayer):
@@ -57,34 +87,25 @@ class Player(QtMultimedia.QMediaPlayer):
         super(Player, self).__init__()
         self.setObjectName('player')
         self.parent = parent
-        self.playWidgets = self.parent
-        # 关联视频进度和进度条位置
-        self.positionChanged.connect(self.parent.setSliderPostion)
-        self.metaDataAvailableChanged.connect(self.metaDataPrint)
-        # self.
-        self.mediaStatusChanged.connect(self.mediaChangedSlot)
-        self.error.connect(self.handleError)
-        file = QtCore.QFile('E:\\pyworkspace\\media_player\\test1.mp4')
+        self.playWidgets = self.parent.media_screen
+
+        file = QtCore.QFile('E:\\PyProject\\media_player\\test.mp4')
         flag = file.open(QtCore.QIODevice.ReadOnly)
         print("flag:", flag)
         if not flag:
             print("Could not open file")
         path = file.fileName()
-        print(path)
         url = QtCore.QUrl.fromLocalFile(path)
 
         content = QtMultimedia.QMediaContent(url)
-        print(content.canonicalUrl())
         # 输出位置必须在setMedia前面
         self.setVideoOutput(self.parent.media_screen)
         self.setMedia(content)
         print('时长：', self.duration())
 
-    def setPosition(self, p_int):
-        print(p_int)
-
-    def custom_postion(self, int):
-        print('当前位置：', int)
+    def set_media_position(self, p_int):
+        """重新定位媒体播放位置的槽"""
+        self.setPosition(p_int)
 
     def metaDataPrint(self):
         print('歌名：', self.metaData('Title'))
@@ -107,7 +128,7 @@ class Player(QtMultimedia.QMediaPlayer):
 
         # self.parent.media_screen.move((screen.size().width() - size.width()) / 2, (screen.size().height() / 2 - size.height()) / 2)
         self.parent.setGeometry((screen.size().width() - size.width()) / 2,
-                                (screen.size().height() / 2 - (size.height() + self.parent.slider.height())) / 2,
+                                (screen.size().height() - (size.height() + self.parent.slider.height())) / 2,
                                 size.width(), size.height() + self.parent.slider.height())
         self.parent.media_screen.resize(size.width(), size.height())
 
@@ -122,15 +143,56 @@ class Player(QtMultimedia.QMediaPlayer):
         sys.exit()
 
     def mediaChangedSlot(self, status):
-        print('mediaStatus--------------', status)
         if status == 7:
             self.play()
 
 
-app = QtWidgets.QApplication(sys.argv)
+class Slider(QtWidgets.QSlider):
+    def __init__(self, parent=None):
+        super(Slider, self).__init__(QtCore.Qt.Horizontal, parent)
+        self.parent = parent
+        self.setFixedHeight(8)
+        # 设置开启鼠标点击事件
+        self.setSliderDown(True)
+        self.sliderReleased.connect(self.handle_slider_released)
+        self.setStyleSheet('''
+                     QSlider::add-page:Horizontal
+                     {
+                        background-color: rgb(87, 97, 106);
+                        height:8px;
+                     }
+                     QSlider::sub-page:Horizontal
+                    {
+                        background-color:qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba(80,231,149, 255), stop:1 rgba(7,208,255, 255));
+                        height:8px;
+                     }
+                    QSlider::groove:Horizontal
+                    {
+                        background:transparent;
+                        height:8px;
+                    }
+                    QSlider::handle:Horizontal
+                    {
+                        height: 12px;
+                        width:8px;
+                        color: green;
+                        margin: -8 0px;
+                    }
+                    ''')
 
-wid = MediaPlayer()
-player = Player(wid)
-player.play()
+    def set_slider_position(self, value=0):
+        self.setValue(value)
 
-sys.exit(app.exec_())
+    def handle_slider_pressed(self):
+        pass
+
+    def handle_slider_released(self):
+        # 拖动滑块发射重新定位媒体播放位置信号
+        self.parent._slider_draged.emit(self.value())
+
+
+if __name__ == '__main__':
+    app = QtWidgets.QApplication(sys.argv)
+    wid = MediaPlayer()
+    wid.player.play()
+    sys.exit(app.exec_())
