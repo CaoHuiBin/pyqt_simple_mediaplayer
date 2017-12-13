@@ -1,5 +1,5 @@
 from PyQt5 import QtMultimediaWidgets, QtMultimedia, QtWidgets, QtCore, QtGui
-import sys
+import sys, os
 
 
 class MediaPlayer(QtWidgets.QWidget):
@@ -9,11 +9,12 @@ class MediaPlayer(QtWidgets.QWidget):
     def __init__(self):
         super(MediaPlayer, self).__init__()
         self.setWindowTitle("IMedia Player")
-        self.setWindowIcon(QtGui.QIcon(r'E:\PyProject\pyqt_simple_mediaplayer\images\logo.jpg'))
-
+        icon_path = os.getcwd() + '\images\logo.jpg'
+        self.setWindowIcon(QtGui.QIcon(icon_path))
         self.layout = QtWidgets.QVBoxLayout()
         self.slider = Slider(self)
-        self.media_screen = QtMultimediaWidgets.QVideoWidget()
+        self.media_screen = PlayScreen(self)
+
         self.player = Player(self)
         self.setWidgets()
         self.setSignal()
@@ -35,6 +36,7 @@ class MediaPlayer(QtWidgets.QWidget):
         self.player.error.connect(self.player.handleError)
         self._slider_draged.connect(self.player.set_media_position)
 
+    """
     def closeEvent(self, event):
         reply = QtWidgets.QMessageBox.question(self, '确认退出', '你确定退出吗？',
                                                QtWidgets.QMessageBox.Yes,
@@ -43,8 +45,10 @@ class MediaPlayer(QtWidgets.QWidget):
             event.accept()
         else:
             event.ignore()
+    """
 
     def keyPressEvent(self, e):
+        print('Pressed Key:', e.key())
         if e.key() == QtCore.Qt.Key_Space:
             if self.player.state() == QtMultimedia.QMediaPlayer.PausedState:
                 self.player.play()
@@ -54,32 +58,37 @@ class MediaPlayer(QtWidgets.QWidget):
             if self.isFullScreen():
                 self.showNormal()
                 self.slider.show()
-        elif e.key() == QtCore.Qt.Key_Enter:
-            print("aa")
-            if self.isFullScreen():
+        elif e.key() == QtCore.Qt.Key_Enter or e.key() == QtCore.Qt.Key_Return:
+            if not self.isFullScreen():
                 self.showFullScreen()
-            else:
-                self.showFullScreen()
+                self.slider.hide()
+        elif e.key() == QtCore.Qt.Key_Left:
+            self.slider.setValue(self.slider.value() + 1000)
+            self.slider.handle_slider_released()
+        elif e.key == QtCore.Qt.Key_Right:
+            pass
+
+
+class PlayScreen(QtMultimediaWidgets.QVideoWidget):
+    def __init__(self, parent=None):
+        super(PlayScreen, self).__init__()
+        self.parent = parent
 
     def mouseDoubleClickEvent(self, e):
-        if self.isFullScreen():
-            self.showNormal()
-            self.slider.show()
-        else:
-            self.showFullScreen()
-            self.slider.hide()
+        if e.button() == QtCore.Qt.LeftButton:
+            if self.parent.isFullScreen():
+                self.parent.showNormal()
+                self.parent.slider.show()
+            else:
+                self.parent.showFullScreen()
+                self.parent.slider.hide()
 
     def mouseReleaseEvent(self, e):
-        if self.player.state() == QtMultimedia.QMediaPlayer.PlayingState:
-            self.player.pause()
-        elif self.player.state() == QtMultimedia.QMediaPlayer.PausedState:
-            self.player.play()
-
-    def mouseMoveEvent(self, e):
-        print(QtWidgets.QDesktopWidget.x())
-        print(e.y())
-        if e.y() > QtWidgets.QDesktopWidget.x() * 0.9:
-            print('aaaa')
+        if e.button() == QtCore.Qt.LeftButton:
+            if self.parent.player.state() == QtMultimedia.QMediaPlayer.PlayingState:
+                self.parent.player.pause()
+            elif self.parent.player.state() == QtMultimedia.QMediaPlayer.PausedState:
+                self.parent.player.play()
 
 
 class Player(QtMultimedia.QMediaPlayer):
@@ -88,8 +97,8 @@ class Player(QtMultimedia.QMediaPlayer):
         self.setObjectName('player')
         self.parent = parent
         self.playWidgets = self.parent.media_screen
-
-        file = QtCore.QFile('E:\\PyProject\\media_player\\test.mp4')
+        media_path = os.getcwd() + '\\test1.mp4'
+        file = QtCore.QFile(media_path)
         flag = file.open(QtCore.QIODevice.ReadOnly)
         print("flag:", flag)
         if not flag:
@@ -128,7 +137,7 @@ class Player(QtMultimedia.QMediaPlayer):
 
         # self.parent.media_screen.move((screen.size().width() - size.width()) / 2, (screen.size().height() / 2 - size.height()) / 2)
         self.parent.setGeometry((screen.size().width() - size.width()) / 2,
-                                (screen.size().height() - (size.height() + self.parent.slider.height())) / 2,
+                                (screen.size().height() / 2 - (size.height() + self.parent.slider.height())) / 2,
                                 size.width(), size.height() + self.parent.slider.height())
         self.parent.media_screen.resize(size.width(), size.height())
 
@@ -144,17 +153,20 @@ class Player(QtMultimedia.QMediaPlayer):
 
     def mediaChangedSlot(self, status):
         if status == 7:
-            self.play()
+            # self.play()
+            pass
 
 
 class Slider(QtWidgets.QSlider):
     def __init__(self, parent=None):
         super(Slider, self).__init__(QtCore.Qt.Horizontal, parent)
         self.parent = parent
+        self.setMouseTracking(True)
         self.setFixedHeight(8)
         # 设置开启鼠标点击事件
         self.setSliderDown(True)
         self.sliderReleased.connect(self.handle_slider_released)
+        # self.valueChanged.connect(self.valueChanged)
         self.setStyleSheet('''
                      QSlider::add-page:Horizontal
                      {
@@ -181,7 +193,8 @@ class Slider(QtWidgets.QSlider):
                     ''')
 
     def set_slider_position(self, value=0):
-        self.setValue(value)
+        self.setSliderPosition(value)
+        # self.setValue(value)
 
     def handle_slider_pressed(self):
         pass
@@ -190,8 +203,15 @@ class Slider(QtWidgets.QSlider):
         # 拖动滑块发射重新定位媒体播放位置信号
         self.parent._slider_draged.emit(self.value())
 
+    def mouseMoveEvent(self, e):
+        pass
+
+    def mouseReleaseEvent(self, event):
+        self.parent.player.setPosition(round(self.maximum() / self.width() * event.x()))
+
 
 if __name__ == '__main__':
+    print('path:', os.getcwd())
     app = QtWidgets.QApplication(sys.argv)
     wid = MediaPlayer()
     wid.player.play()
